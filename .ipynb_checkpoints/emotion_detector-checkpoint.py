@@ -13,7 +13,7 @@ from tensorflow.keras.applications.efficientnet_v2 import preprocess_input
 st.set_page_config(page_title="emotion detector", page_icon="😃", layout="centered", initial_sidebar_state="collapsed")
 #st.set_option('deprecation.showPyplotGlobalUse', False)
 ##############################################################################################################
-model = load_model('emotion2.keras')
+model = load_model('emotion4.keras')
 @st.cache_data
 def display_histogram(img):
         img = np.array(img)
@@ -73,6 +73,13 @@ unsafe_allow_html=True)
 # </style>
 # """
 tab1, tab2 = st.tabs(['Upload An Image 🖼️', 'Take A Picture 📸'])
+emotion_labels = ['angry',
+ 'Disgust',
+ 'Fear',
+ 'Happy',
+ 'Neutral',
+ 'Sad',
+ 'Surprise']
 
 # st.markdown(custom_css, unsafe_allow_html=True)
 with tab1: 
@@ -80,15 +87,60 @@ with tab1:
         image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], key="file_uploader")
         if image:
             imgg = Image.open(image)
-            final_img = imgg
-            old = imgg
-            gray_img = imgg.convert("L")
             
             st.image(imgg)
         submit_btn = st.form_submit_button('Detect Emotion', type='primary')
+
         if submit_btn:
-            img = imgg.convert("RGB")
+            if image is not None:
+                img = imgg.convert("RGB")
+            
+                # Resize to EfficientNet input size
+                img = img.resize((224, 224))
+                
+                # Convert to numpy
+                img_array = np.array(img)
+                
+                # Convert to float & preprocess
+                img_array = preprocess_input(img_array)
+                
+                # Add batch dimension
+                input_arr = np.expand_dims(img_array, axis=0)
+                
+                # Predict
+                prediction = model.predict(input_arr)
     
+                predicted_class = np.argmax(prediction)
+                confidence = np.max(prediction) * 100
+                emotion = emotion_labels[predicted_class]
+                st.info(f"Emotion Detected: **{emotion}** ({confidence:.2f}%)")
+            else: 
+                st.error("No image to detect.")
+        
+
+with tab2:
+    # with st.form("TAKE A PICTURE"):   
+    #     enable1 = st.checkbox("Enable camera")
+    #     picture1 = st.camera_input("Take a picture", disabled=not enable1)
+        
+    #     if picture1:
+    #         st.image(picture1)
+    #     submit_btn = st.form_submit_button('Detect Emotion', type='primary')
+    # if submit_btn:
+    #     st.snow()
+    #     st.info('This person is feeling sad 😢')
+    enable = st.checkbox("Enable camera")
+    picture = st.camera_input("Take a picture", disabled=not enable)
+    
+    if picture:
+        st.image(picture)
+    submit_btn = st.button('Detect Emotion', type='primary')
+    if submit_btn:
+        if picture is not None:
+            # st.snow()
+            # st.info('This person is feeling sad 😢')
+            img =  Image.open(picture).convert("RGB")
+            
             # Resize to EfficientNet input size
             img = img.resize((224, 224))
             
@@ -103,18 +155,10 @@ with tab1:
             
             # Predict
             prediction = model.predict(input_arr)
-            st.info(f"Emotion Detected: {prediction}")
-            st.snow()
-            st.info('This person is feeling sad 😢')
 
-with tab2:
-    with st.form("TAKE A PICTURE"):   
-        enable = st.checkbox("Enable camera")
-        picture = st.camera_input("Take a picture", disabled=not enable)
-        
-        if picture:
-            st.image(picture)
-        submit_btn = st.form_submit_button('Detect Emotion', type='primary')
-    if submit_btn:
-        st.snow()
-        st.info('This person is feeling sad 😢')
+            predicted_class = np.argmax(prediction)
+            confidence = np.max(prediction) * 100
+            emotion = emotion_labels[predicted_class]
+            st.info(f"Emotion Detected: **{emotion}** ({confidence:.2f}%)")
+        else: 
+            st.error("No image to detect.")
