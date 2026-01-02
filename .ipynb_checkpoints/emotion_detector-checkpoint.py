@@ -1,5 +1,5 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.ImageFilter import *
 from PIL import ImageEnhance
 #import cv2
@@ -15,26 +15,24 @@ st.set_page_config(page_title="emotion detector", page_icon="😃", layout="cent
 ##############################################################################################################
 model = load_model('emotion4.keras')
 @st.cache_data
-def display_histogram(img):
-        img = np.array(img)
-        fig, ax = plt.subplots(1, 2, figsize=(15, 5))
-        ax[0].imshow(img)
-        ax[0].axis("off")
-        ax[0].set_title("Image")
-        ax[1].hist(img.ravel(), bins=256, histtype="step", color="black")
-        ax[1].set_title("Histogram")
-        plt.suptitle("Image and its Histogram")
-        st.pyplot(fig)
-@st.cache_data
-def luminosite(img, pourcentage):
-    return ImageEnhance.Brightness(img).enhance(1 + pourcentage)
-@st.cache_data
-def get_image_download_link(img,filename,text):
-    buffered = BytesIO()
-    img.save(buffered, format="JPEG")
-    img_str = b64encode(buffered.getvalue()).decode()
-    href =  f'<a href="data:file/txt;base64,{img_str}" download="{filename}">{text}</a>'
-    return href
+def classify(image, model, class_names): 
+    # convery image to (224,224)
+    image = ImageOps.fit(image, (224,224), Image.Resampling.LANCZOS)
+    # convert image to numpy array
+    image_array = np.asarray(image)
+    # normalize image
+    normalized_image_array = (image_array.astype(np.float32) / 127.5) - 1
+    # set model input 
+    data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
+    data[0] = normalized_image_array
+    # make prediction
+    prediction = model.predict(data)
+    index = np.argmax(prediction) 
+    class_name = class_names[index] 
+    confidence_score = prediction[0][index]
+    
+                    
+    return class_name, confidence_score
 ##############################################################################################################
 st.markdown("""
 <div style="display: flex; justify-content: center; align-items: center;">
@@ -73,7 +71,7 @@ unsafe_allow_html=True)
 # </style>
 # """
 tab1, tab2 = st.tabs(['Upload An Image 🖼️', 'Take A Picture 📸'])
-emotion_labels = ['angry',
+class_names = ['angry',
  'Disgust',
  'Fear',
  'Happy',
@@ -83,82 +81,31 @@ emotion_labels = ['angry',
 
 # st.markdown(custom_css, unsafe_allow_html=True)
 with tab1: 
-    with st.form("UPLOAD IMAGE"):
-        image = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], key="file_uploader")
-        if image:
-            imgg = Image.open(image)
-            
-            st.image(imgg)
-        submit_btn = st.form_submit_button('Detect Emotion', type='primary')
-
-        if submit_btn:
-            if image is not None:
-                img = imgg.convert("RGB")
-            
-                # Resize to EfficientNet input size
-                img = img.resize((224, 224))
-                
-                # Convert to numpy
-                img_array = np.array(img)
-                
-                # Convert to float & preprocess
-                img_array = preprocess_input(img_array)
-                
-                # Add batch dimension
-                input_arr = np.expand_dims(img_array, axis=0)
-                
-                # Predict
-                prediction = model.predict(input_arr)
-    
-                predicted_class = np.argmax(prediction)
-                confidence = np.max(prediction) * 100
-                emotion = emotion_labels[predicted_class]
-                st.info(f"Emotion Detected: **{emotion}** ({confidence:.2f}%)")
-            else: 
-                st.error("No image to detect.")
+    file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"], key="file_uploader")
+    if file is not None:
+        image = Image.open(file).convert("RGB")
+        
+        st.image(image)
+        class_name, conf_score = classify(image, model, class_names)
+        
+        # st.write("## {}".format(class_name))
+        # st.write("## Score: {}".format(conf_score))
+        st.info(f"Emotion Detected: **{class_name}** | Confidence Score: {conf_score:.2f}%")
         
 
 with tab2:
-    # with st.form("TAKE A PICTURE"):   
-    #     enable1 = st.checkbox("Enable camera")
-    #     picture1 = st.camera_input("Take a picture", disabled=not enable1)
-        
-    #     if picture1:
-    #         st.image(picture1)
-    #     submit_btn = st.form_submit_button('Detect Emotion', type='primary')
-    # if submit_btn:
-    #     st.snow()
-    #     st.info('This person is feeling sad 😢')
     enable = st.checkbox("Enable camera")
     picture = st.camera_input("Take a picture", disabled=not enable)
     
-    if picture:
-        st.image(picture)
-    submit_btn = st.button('Detect Emotion', type='primary')
-    if submit_btn:
-        if picture is not None:
-            # st.snow()
-            # st.info('This person is feeling sad 😢')
-            img =  Image.open(picture).convert("RGB")
+    if picture is not None:
+        pic = Image.open(picture).convert("RGB")
+        
+        st.image(pic)
+        submit_btn = st.button('Detect Emotion', type='primary')
+        if submit_btn:
+            if pic is not None: 
+                class_name, conf_score = classify(pic, model, class_names)
             
-            # Resize to EfficientNet input size
-            img = img.resize((224, 224))
-            
-            # Convert to numpy
-            img_array = np.array(img)
-            
-            # Convert to float & preprocess
-            img_array = preprocess_input(img_array)
-            
-            # Add batch dimension
-            input_arr = np.expand_dims(img_array, axis=0)
-            
-            # Predict
-            prediction = model.predict(input_arr)
-
-            predicted_class = np.argmax(prediction)
-            confidence = np.max(prediction) * 100
-            emotion = emotion_labels[predicted_class]
-            st.info(f"Emotion Detected: **{emotion}** ({confidence:.2f}%)")
-        else: 
-            st.error("No image to detect.")
+                st.info(f"Emotion Detected: **{class_name}** | Confidence Score: {conf_score:.2f}%") 
+            else: 
+                st.error("No image to detect.")
